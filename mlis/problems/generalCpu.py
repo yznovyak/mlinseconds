@@ -13,11 +13,9 @@ from ..utils import solutionmanager as sm
 SIZE = 40
 LAYERS = 6
 
-class Solution():
-    def __init__(self):
-        self = self
-
-    def create_model(self, input_size, output_size):
+class SolutionModel(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(SolutionModel, self).__init__()
         assert output_size == 1
         lst = []
         for i in range(LAYERS):
@@ -26,7 +24,25 @@ class Solution():
             lst.append(nn.Linear(input_size if i == 0 else SIZE,
                                  output_size if i == LAYERS-1 else SIZE))
         lst.append(nn.Sigmoid())
-        return nn.Sequential(*lst)
+        self.model = nn.Sequential(*lst)
+        self.loss_fn = torch.nn.BCELoss()
+
+    def forward(self, x):
+        return self.model.forward(x)
+
+    def calc_loss(self, output, target):
+        return self.loss_fn(output, target)
+
+    def calc_predict(self, output):
+        return output.round()
+
+
+class Solution():
+    def __init__(self):
+        self = self
+
+    def create_model(self, input_size, output_size):
+        return SolutionModel(input_size, output_size)
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
