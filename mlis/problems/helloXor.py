@@ -11,26 +11,27 @@ from ..utils import solutionmanager as sm
 class SolutionModel(nn.Module):
     def __init__(self, input_size, output_size):
         super(SolutionModel, self).__init__()
-        self.input_size = input_size
-        sm.SolutionManager.print_hint("Hint[1]: Xor can not be learned with only one layer")
-        self.hidden_size = 1
-        self.linear1 = nn.Linear(input_size, self.hidden_size)
-        self.linear2 = nn.Linear(self.hidden_size, output_size)
+        assert output_size == 1
+        self.model = nn.Sequential(
+            nn.Linear(input_size, 5),
+            nn.LeakyReLU(),
+            nn.Linear(5, 5),
+            nn.LeakyReLU(),
+            nn.Linear(5, 5),
+            nn.LeakyReLU(),
+            nn.Linear(5, 1),
+            nn.Sigmoid(),
+        )
+        self.loss_fn = torch.nn.BCELoss()
 
     def forward(self, x):
-        x = self.linear1(x)
-        x = torch.sigmoid(x)
-        x = self.linear2(x)
-        x = torch.sigmoid(x)
-        return x
+        return self.model.forward(x)
 
     def calc_loss(self, output, target):
-        loss = ((output-target)**2).sum()
-        return loss
+        return self.loss_fn(output, target)
 
     def calc_predict(self, output):
-        predict = output.round()
-        return predict
+        return output.round()
 
 class Solution():
     def __init__(self):
@@ -42,41 +43,33 @@ class Solution():
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
         step = 0
-        # Put model in train mode
+        # init model
+        torch.manual_seed(1)
+        for p in model.parameters():
+            nn.init.uniform_(p, -1.0, +1.0)
         model.train()
+        loss_fn = torch.nn.BCELoss()
+        optimizer = optim.RMSprop(model.parameters())
         while True:
             time_left = context.get_timer().get_time_left()
             # No more time left, stop training
             if time_left < 0.1:
                 break
-            sm.SolutionManager.print_hint("Hint[2]: Learning rate is too small", step)
-            optimizer = optim.SGD(model.parameters(), lr=0.00001)
-            data = train_data
-            target = train_target
-            # model.parameters()...gradient set to zero
+
             optimizer.zero_grad()
-            # evaluate model => model.forward(data)
-            output = model(data)
-            # if x < 0.5 predict 0 else predict 1
-            predict = model.calc_predict(output)
-            # Number of correct predictions
-            correct = predict.eq(target.view_as(predict)).long().sum().item()
-            # Total number of needed predictions
-            total = predict.view(-1).size(0)
-            # calculate loss
-            loss = model.calc_loss(output, target)
-            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
+            output = model(train_data)
+            loss = loss_fn(output, train_target)
             loss.backward()
-            # print progress of the learning
-            self.print_stats(step, loss, correct, total)
-            # update model: model.parameters() -= lr * gradient
+
+            total = train_target.view(-1).size(0)
+            predicted = output.round()
+            correct = predicted.eq(train_target.view_as(predicted)).long().sum().item()
+            if correct == total:
+                break
+
             optimizer.step()
             step += 1
         return step
-
-    def print_stats(self, step, loss, correct, total):
-        if step % 1000 == 0:
-            print("Step = {} Prediction = {}/{} Error = {}".format(step, correct, total, loss.item()))
 
 ###
 ###
