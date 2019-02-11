@@ -10,68 +10,53 @@ import torch.nn.functional as F
 import torch.optim as optim
 from ..utils import solutionmanager as sm
 
-class SolutionModel(nn.Module):
-    def __init__(self, input_size, output_size):
-        super(SolutionModel, self).__init__()
-        self.input_size = input_size
-        sm.SolutionManager.print_hint("Hint[1]: Explore more deep neural networks")
-        self.hidden_size = 10
-        self.linear1 = nn.Linear(input_size, self.hidden_size)
-        self.linear2 = nn.Linear(self.hidden_size, output_size)
-
-    def forward(self, x):
-        x = self.linear1(x)
-        x = F.sigmoid(x)
-        x = self.linear2(x)
-        x = F.sigmoid(x)
-        return x
+SIZE = 40
+LAYERS = 6
 
 class Solution():
     def __init__(self):
         self = self
 
     def create_model(self, input_size, output_size):
-        return SolutionModel(input_size, output_size)
+        assert output_size == 1
+        lst = []
+        for i in range(LAYERS):
+            if i != 0:
+                lst.append(nn.Tanh())
+            lst.append(nn.Linear(input_size if i == 0 else SIZE,
+                                 output_size if i == LAYERS-1 else SIZE))
+        lst.append(nn.Sigmoid())
+        return nn.Sequential(*lst)
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
         step = 0
-        # Put model in train mode
+        # init model
+        torch.manual_seed(5)
+        for p in model.parameters():
+            nn.init.uniform_(p, -1.0, +1.0)
         model.train()
+        loss_fn = torch.nn.BCELoss()
+        optimizer = optim.RMSprop(model.parameters(), lr=0.00175751062)
         while True:
             time_left = context.get_timer().get_time_left()
-            # No more time left, stop training
             if time_left < 0.1:
                 break
-            optimizer = optim.SGD(model.parameters(), lr=1.0)
-            data = train_data
-            target = train_target
-            # model.parameters()...gradient set to zero
+
             optimizer.zero_grad()
-            # evaluate model => model.forward(data)
-            sm.SolutionManager.print_hint("Hint[2]: Explore other activation functions", step)
-            output = model(data)
-            # if x < 0.5 predict 0 else predict 1
-            predict = output.round()
-            # Number of correct predictions
-            correct = predict.eq(target.view_as(predict)).long().sum().item()
-            # Total number of needed predictions
-            total = target.view(-1).size(0)
-            # calculate loss
-            sm.SolutionManager.print_hint("Hint[3]: Explore other loss functions", step)
-            loss = ((output-target)**2).sum()
-            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
+            output = model(train_data)
+            loss = loss_fn(output, train_target)
             loss.backward()
-            # print progress of the learning
-            self.print_stats(step, loss, correct, total)
-            # update model: model.parameters() -= lr * gradient
+            total = train_target.view(-1).size(0)
+            predicted = output.round()
+            correct = predicted.eq(train_target.view_as(predicted)).long().sum().item()
+            if correct == total:
+                break
+
             optimizer.step()
             step += 1
+
         return step
-    
-    def print_stats(self, step, loss, correct, total):
-        if step % 1000 == 0:
-            print("Step = {} Prediction = {}/{} Error = {}".format(step, correct, total, loss.item()))
 
 ###
 ###
